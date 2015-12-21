@@ -1,0 +1,566 @@
+123
+
+/*
+ * HallSensor.c
+ *
+ *  Created on: Dec 5, 2015
+ *      Author: Duc Cuong Dinh
+ */
+#include <stdio.h>
+#include "generalinfo.h"
+#include "memory.h"
+#include "cursor.h"
+#include "uart.h"
+#include "HallSensor.h"
+#include "kernel.h"
+#include "messageatmel.h"
+#include "switch.h"
+
+extern volatile enum SWITCH_STATE gate[MAX_SWITCH];
+
+unsigned int print_hallsensor(unsigned int hsnumber)
+{
+	volatile char *hs_result;
+	volatile unsigned int location;
+	hs_result = (char *)allocate(STRING_SIZE);
+
+	if(hs_result == NULL)
+		return FALSE;
+
+	location = 0;
+	cursor_position(hs_result,&location,hsnumber*6,2);
+//	hs_result[location++] = getId() + '0';
+
+	hs_result[location++] = hsnumber /10;
+	hs_result[location++] = hsnumber %10;
+
+	hs_result[location++] = (char)NULL_INDEX;//the end of string
+	send_to_UART(hs_result);
+	hs_result = NULL;
+	return TRUE;
+}
+
+unsigned int get_next_hall_sensor(unsigned int nextsection, unsigned int direction)
+{
+	return ((nextsection * 2) + direction);
+}
+
+unsigned int obtain_decision(unsigned int hsnumber, unsigned int direction, unsigned int next_section)
+{
+	unsigned int speed = SPEEDY;
+	unsigned int next;
+	switch(hsnumber)
+	{
+		case 1: 
+			////printf("NOW hall <<1>>\n");
+			if(direction)
+			{
+				next = 2;
+				//power off section 6
+				hall_sensor_dir_mag(6,0);
+			}
+			else
+			{
+				next = 12;
+				hall_sensor_dir_mag(6,DIR_SPEED(direction, speed));//power on section 6
+			}
+			break;
+		case 2:
+			//printf("NOW hall <<2>>\n");
+			if(direction)
+			{
+				//check if the next sextion is 14
+				if(next_section==14)
+				{
+					//turn switch s2 on
+					gate[2]=ON;
+					hall_sensor_switch(2,0);
+				}
+				hall_sensor_dir_mag(2,DIR_SPEED(direction, speed));//power on section 2
+				hall_sensor_switch(1,1);
+				next = 3;
+			}
+			else
+			{
+				hall_sensor_dir_mag(2,0);
+				next = 1;
+			}
+			break;
+		
+		case 3:
+			//printf("NOW hall <<3>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(1,0);
+				if(gate[2]== ON)		//s2
+				{
+					next = 27;
+					hall_sensor_dir_mag(14,DIR_SPEED(direction, speed));
+				}
+				else
+					next = 4;
+			}
+			else
+			{
+				next = 2;
+				hall_sensor_dir_mag(1,DIR_SPEED(direction, speed));//power on section 1
+			}
+			
+			break;
+		case 4:
+			//printf("NOW hall <<4>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(3,DIR_SPEED(direction, speed));
+				next = 5;
+			}
+			else
+			{
+				hall_sensor_switch(2,1);
+				hall_sensor_dir_mag(3,0);
+				next = 3;
+			}
+			break;
+		case 5:
+			//printf("NOW hall <<5>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(2,0);
+				hall_sensor_switch(3,1);
+				next = 6;
+			}
+		else
+			{
+				hall_sensor_dir_mag(2,DIR_SPEED(direction, speed));
+				next = 4;
+			}
+			break;
+		case 6:
+			//printf("NOW hall <<6>>\n");
+			if(direction)
+			{
+				//hall_sensor_switch(4,1);
+				hall_sensor_dir_mag(4,DIR_SPEED(direction, speed));				
+				next = 7;
+			}
+			else
+			{
+				hall_sensor_dir_mag(4,0);
+				if(gate[3]== ON)	//s3
+				{
+					hall_sensor_dir_mag(9,DIR_SPEED(direction, speed));
+					hall_sensor_switch(7,0);
+					next = 17;
+				}
+				else
+					next = 5;
+			}
+			break;
+		case 7:
+			//printf("NOW hall <<7>>\n");
+			if(direction) 
+			{
+				if(next_section==16)
+				{
+					gate[5]=ON;
+					hall_sensor_switch(5,0);
+				}
+				if(gate[4]==0)//check if the switch 4 is on , if it is on change the train direction
+				{
+					hall_sensor_dir_mag(13,DIR_SPEED(direction-1, speed));//change direction
+					next=26;
+				}
+				else
+				{ 
+				hall_sensor_dir_mag(3,0);
+				next = 8;
+				}
+					
+			}
+			else
+			{
+				if(next_section==9)
+				{
+					gate[3]==ON;
+					hall_sensor_switch(3,0);
+				}
+				hall_sensor_dir_mag(3,DIR_SPEED(direction, speed));
+				if(gate[4]== ON)	//s4
+				{
+					//hall_sensor_dir_mag(3,7);
+					hall_sensor_dir_mag(13,DIR_SPEED(direction, speed));
+					next = 26;
+				}
+				else
+				{
+					//hall_sensor_dir_mag(3,7);
+					next = 6;
+				}
+			}
+			break;
+		case 8:
+			//printf("NOW hall <<8>>\n");
+			//if(direction)
+			//{
+
+			  if(gate[5]== ON)
+				{
+					hall_sensor_dir_mag(16,DIR_SPEED(direction, speed));
+					next = 31;
+				}
+				else
+				{
+					hall_sensor_dir_mag(5,DIR_SPEED(direction, speed));
+					next = 9;
+				}
+		//	}
+			//else
+			//{
+				//next=7;
+				//if(gate[5]==ON)
+					//hall_sensor_dir_mag(16,0);
+				//else					
+					//hall_sensor_dir_mag(5,0);
+			//}
+			break;
+		case 9:
+			//printf("NOW hall <<9>>\n");
+			//if(direction)
+			//{
+				hall_sensor_dir_mag(4,0);
+				if(gate[6]==ON)
+				{
+					hall_sensor_dir_mag(12,DIR_SPEED(1, speed));
+					hall_sensor_switch(8,0);//make sure switch 8 is on;
+					next=24;
+				}
+				else
+					next=10;	
+			//}
+			
+	  	  	/* 
+			else
+			{
+				hall_sensor_switch(5,1);
+				hall_sensor_dir_mag(4,DIR_SPEED(direction, speed));
+				next=8;	
+			}
+			*/	
+			break;
+		case 10:
+			//printf("NOW hall <<10>>\n");
+			hall_sensor_dir_mag(6,DIR_SPEED(1, speed));
+			next=11;
+			break;
+		case 11:
+			//printf("NOW hall <<11>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(5,0);
+				next=12;
+			}
+			else
+			{
+				//hall_sensor_dir_mag(5,DIR_SPEED((direction+1)&1, speed));
+				
+				next=12;		
+			}
+			break;
+		case 12:
+			//printf("NOW hall <<12>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(1,DIR_SPEED(direction, speed));
+				next=1;
+			}
+			else
+			{
+				hall_sensor_dir_mag(1,0);
+				next=11;
+			}
+			break;
+		case 13:
+			//printf("NOW hall <<13>>\n");
+			if(direction)
+			{
+				next=14;
+				hall_sensor_dir_mag(12,0);
+				if(gate[9]==ON)
+				{
+					hall_sensor_dir_mag(15,0);
+					//hall_sensor_switch(9,1);
+				}
+			}
+			else
+			{
+				if(gate[9]==ON)
+				{
+					hall_sensor_dir_mag(15,DIR_SPEED(direction, speed));
+					hall_sensor_dir_mag(12,DIR_SPEED(direction, speed));
+					next=29;
+				}
+				else
+				{
+					hall_sensor_dir_mag(12,DIR_SPEED(direction, speed));
+					next=24;
+				}
+			}
+			break;
+		case 14:
+			//printf("NOW hall <<14>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(8,DIR_SPEED(direction, speed));
+				next=15;
+			}
+			else
+			{
+				if(next_section==15)
+				{
+					gate[9]=ON;
+					hall_sensor_switch(9,0);
+				}
+				hall_sensor_dir_mag(8,0);
+				next=13;
+			}
+			break;
+		case 15:
+			//printf("NOW hall <<15>>\n");
+			if(direction)
+			{
+				next=16;
+				hall_sensor_dir_mag(7,0);
+			}
+			else
+			{
+				hall_sensor_dir_mag(7,DIR_SPEED(direction, speed));
+				next=14;
+			}
+			break;
+		case 16:
+			//printf("NOW hall <<16>>\n");
+			if(direction)
+			{
+				if(next_section==3);
+				{
+					gate[7]=ON;
+					hall_sensor_switch(7,0);
+				}
+				hall_sensor_dir_mag(9,DIR_SPEED(direction, speed));
+				next=17;		
+			}
+			else
+			{
+				hall_sensor_dir_mag(9,0);
+				next=15;
+			}
+			break;
+		case 17:
+			//printf("NOW hall <<17>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(8,0);
+				if(gate[7]==ON)
+				{
+					hall_sensor_switch(3,0);
+					hall_sensor_dir_mag(3,DIR_SPEED(direction, speed));
+					next=6;
+				}
+				else
+					next=18;
+			}
+			else
+			{
+				hall_sensor_dir_mag(8,DIR_SPEED(direction, speed));
+				next=16;
+			}
+			break;
+		case 18:
+			//printf("NOW hall <<18>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(10,DIR_SPEED(direction, speed));
+				next=19;
+			}
+			else
+			{
+				hall_sensor_dir_mag(10,0);
+				hall_sensor_switch(7,1);
+				next=17;
+			}
+			break;
+		case 19:
+			//printf("NOW hall <<19>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(9,0);
+				next=20;
+			}
+			else
+			{
+				hall_sensor_dir_mag(9,DIR_SPEED(direction, speed));
+				next=18;
+			}
+			break;
+		case 20:
+			//printf("NOW hall <<20>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(11,DIR_SPEED(direction, speed));
+				next=21;
+			}
+			else
+			{
+				hall_sensor_dir_mag(11,0);
+				next=19;
+			}
+			break;
+		case 21:
+			//printf("NOW hall <<21>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(10,0);
+				next=22;
+			}
+			else
+			{
+				hall_sensor_dir_mag(10,DIR_SPEED(direction, speed));
+				next=20;
+			}
+			break;
+		case 22:
+			//printf("NOW hall <<22>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(12,DIR_SPEED(direction, speed));
+				next=23;
+			}
+			else
+			{
+				hall_sensor_dir_mag(12,0);
+				next=21;
+			}
+			break;
+		case 23:
+			//printf("NOW hall <<23>>\n");
+			if(direction)
+			{
+				hall_sensor_dir_mag(11,0);
+				hall_sensor_switch(8,1);
+				next=24;
+			}
+			else
+			{
+				hall_sensor_dir_mag(11,DIR_SPEED(direction, speed));
+				next=22;
+			}
+			break;
+		case 24:
+			//printf("NOW hall <<24>>\n");
+			if(direction)
+			{
+				hall_sensor_switch(9,1);
+				hall_sensor_dir_mag(7,DIR_SPEED(direction, speed));
+				next=13;
+			}
+			else
+			{
+				hall_sensor_dir_mag(7,0);
+	
+					hall_sensor_switch(8,1);
+					next=23;
+			}
+			break;
+		case 25:
+			//printf("NOW hall <<25>>\n");
+		
+	
+				hall_sensor_switch(1,0);
+				hall_sensor_dir_mag(1,DIR_SPEED(1, speed));
+				hall_sensor_dir_mag(2,DIR_SPEED(1, speed));
+				next=2;
+			
+			break;
+		case 26:
+			//printf("NOW hall <<26>>\n");
+				next=25;
+				hall_sensor_dir_mag(3,0);
+				hall_sensor_dir_mag(4,0);
+			break;
+		case 27:
+			//printf("NOW hall <<27>>\n");
+			if(direction)
+			{
+				next=28;
+				hall_sensor_dir_mag(2,0);
+			}
+			else
+			{
+				hall_sensor_switch(2,0);
+				hall_sensor_dir_mag(2,DIR_SPEED(direction, speed));
+				next=3;
+			}
+			break;
+			
+		case 28:
+			//printf("NOW hall <<28>>\n");
+			hall_sensor_dir_mag(14,0);
+			//hall_sensor_dir_mag(CONVERT_TO_SECTION(hsnumber)+1,0);
+			break;
+		case 29:
+			//printf("NOW hall <<29>>\n");
+			if(direction)
+			{
+				next=13;
+				hall_sensor_switch(9,0);
+				hall_sensor_dir_mag(12,DIR_SPEED(direction, speed));
+				hall_sensor_dir_mag(7,DIR_SPEED(direction, speed));
+			}
+			else
+			{
+				hall_sensor_dir_mag(12,0);
+				hall_sensor_dir_mag(7,0);
+				next=30;
+			}
+			break;
+		case 30:
+			//printf("NOW hall <<30>>\n");
+			hall_sensor_dir_mag(15,0);
+			//hall_sensor_dir_mag(CONVERT_TO_SECTION(hsnumber)+1,0);
+			break;
+		case 31:
+			//printf("NOW hall <<31>>\n");
+			
+			/*if(direction)
+			{
+				hall_sensor_dir_mag(4,0);
+				next=32;
+			}
+			else
+			{
+				hall_sensor_switch(5,0);
+				hall_sensor_dir_mag(4,DIR_SPEED(direction, speed));
+				hall_sensor_dir_mag(3,DIR_SPEED(direction, speed));
+				if(gate[4]== ON)
+				{
+					hall_sensor_dir_mag(13,DIR_SPEED(direction, speed));
+					next = 26;
+				}
+				else
+					next=8;
+			}
+			*/
+			hall_sensor_dir_mag(4,0);
+			next=32;
+			break;
+		case 32:
+			//printf("NOW hall <<32>>\n");
+			hall_sensor_dir_mag(16,0);
+			//hall_sensor_dir_mag(CONVERT_TO_SECTION(hsnumber)+1,0);
+			//terminate();
+			break;
+		default:
+			break;
+	}
+	return next;
+}
